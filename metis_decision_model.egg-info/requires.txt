@@ -1,0 +1,9 @@
+torch>=2.1
+
+[dev]
+pytest>=7.4
+
+[mlx]
+
+[mlx:platform_system == "Darwin" and platform_machine == "arm64"]
+mlx>=0.15

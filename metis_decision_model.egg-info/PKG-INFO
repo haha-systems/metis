@@ -1,0 +1,91 @@
+Metadata-Version: 2.4
+Name: metis-decision-model
+Version: 0.1.0
+Summary: A small learned model for bounded structured decisions
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.1
+Provides-Extra: mlx
+Requires-Dist: mlx>=0.15; (platform_system == "Darwin" and platform_machine == "arm64") and extra == "mlx"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4; extra == "dev"
+
+# Metis v0.1
+
+Metis is a small, non-autoregressive model for decisions over a fixed structured QAC state. The initial experiment predicts one of `CONTINUE`, `ESCALATE`, `DECOMPOSE`, or `ABSTAIN` together with distributional estimates for resource adequacy, stronger-cognition gain, decomposition need, and evidence sufficiency.
+
+## Install
+
+```sh
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
+```
+
+The core dependency is PyTorch. Apple Silicon MLX support is optional:
+
+```sh
+python -m pip install -e '.[mlx]'
+```
+
+## Train and evaluate
+
+The synthetic generator produces examples from latent task difficulty, resource capability, evidence reliability, expected gain, decomposition need, and budget conditions. A small deterministic share of each dataset is reserved for designed counterexamples. Fixed seeds reproduce generated examples and splits.
+
+```sh
+metis-train --family linear --output runs/linear --dataset-seed 17
+metis-train --family mlp --output runs/mlp --dataset-seed 17
+metis-train --family transformer --output runs/transformer --dataset-seed 17
+metis-train --family mixer --output runs/mixer --dataset-seed 17
+metis-evaluate runs/transformer/model.pt --seed 17
+```
+
+Each training run writes `config.json`, `metrics.json`, `ttd.json`, `metamorphic.json`, and `model.pt`. Metrics include multi-task validation history, held-out classification and score metrics, validation-fitted choice temperature, deterministic/heuristic baseline comparisons with paired bootstrap intervals, metamorphic pass rates, training metadata, and a warm batch-1 TTD report. Loss weights are recorded explicitly.
+
+## Inference and replay
+
+```python
+from metis import CognitiveState, MetisPredictor
+
+predictor = MetisPredictor(model, device="cpu")
+decision = predictor.predict(state)
+print(decision.choice, decision.choice_probabilities, decision.scores)
+```
+
+`metis-replay CHECKPOINT INPUT.jsonl OUTPUT.jsonl` runs an offline replay over user-provided records. A record may contain the state directly or under `state`, with categorical enum values written by name. An optional `historical_choice` is preserved in each output for later comparison. No production routing or data export is included.
+
+The exact record contract and the current Ghost trace coverage are documented in [docs/ghost-replay.md](docs/ghost-replay.md).
+
+## Benchmarks
+
+```sh
+metis-ttd --checkpoint runs/transformer/model.pt --device cpu
+metis-throughput --checkpoint runs/transformer/model.pt --device cpu
+metis-mlx-train --output runs/mlx --dataset-seed 17
+python -m benchmarks.mlx --device gpu
+python -m benchmarks.mlx_throughput --checkpoint runs/mlx/model.safetensors --device gpu
+metis-mlx-checkpoint --checkpoint runs/transformer-full/model.pt --device cpu
+metis-mlx-checkpoint --checkpoint runs/transformer-full/model.pt --device gpu
+```
+
+TTD includes state encoding, model inference, and output decoding/calibration; checkpoint loading is reported separately. The report includes p50/p95/p99, mean, and standard deviation, with isolated encoding, forward, and postprocess timings. Throughput results remain separate at batch sizes 1, 8, 32, and 128. `metis-mlx-checkpoint` converts a PyTorch Transformer checkpoint into MLX layers and benchmarks the exact same weights on Apple CPU or GPU, for a direct comparison with the Colab CUDA and PyTorch CPU results. The separately trained MLX MLP remains an independent architecture baseline.
+
+## Metamorphic diagnostics
+
+`training.metamorphic.check_metamorphic` evaluates directional counterfactual properties over a state sample: higher budget pressure should not raise escalation probability, stronger decomposition need should not lower decomposition probability, weaker evidence should raise abstention probability or uncertainty, and changing unknown progress to verified low progress should affect the distribution. These are reported pass rates over the learned model rather than hard-coded policy overrides.
+
+## Initial seeded results
+
+The 2026-09-23 run used the same 12,000-example `synthetic-v1` dataset (seed 17), training seed 23, and 12 epochs for each PyTorch family. The paired 95% bootstrap interval for learned accuracy improvement over the heuristic was fully above zero for all four families. The Transformer gave 75.4% held-out accuracy, 72,819 parameters, 0.65 ms warm batch-1 CPU p95 TTD, and a 30.8–38.3 percentage-point accuracy improvement interval. The Mixer gave 74.8% accuracy with 42,055 parameters. The chosen Transformer test ECE was 0.020 and abstention recall was 0.882.
+
+The equivalent-schema MLX MLP reached 75.7% held-out accuracy with 9,267 parameters. On the same Apple Silicon host, measured p95 TTD was 0.15 ms on MLX CPU and 0.52 ms on MLX GPU. The PyTorch Transformer measured 0.45 ms on CPU and 18.45 ms on MPS, so MPS was not a useful batch-1 path for this model. Throughput at batches 1, 8, 32, and 128 is recorded separately. Full measurements and paired comparisons are in [`runs/hardware-comparison.json`](runs/hardware-comparison.json).
+
+These are synthetic-domain results on one Apple Silicon host. CUDA/T4 and a replay over real Ghost/QAC exports remain unmeasured.
+
+Run the project tests with `python -m pytest`. Benchmarks and tests require the declared dependencies; MLX requires Apple Silicon and its optional package.
+
+## Scope and current research status
+
+The decision head uses learned, sign-constrained terms for escalation costs and decomposition pressure. These keep the cost and contradiction counterfactuals monotone while leaving their magnitudes learned from data. Consistency penalties train the other paired properties; all measured pass rates are recorded in each run.
+
+A runnable Google Colab notebook is available at [notebooks/metis_t4_benchmark.ipynb](notebooks/metis_t4_benchmark.ipynb), with a ready-to-upload [source archive](notebooks/metis-colab-source.zip). Select a T4 GPU runtime, upload the archive when prompted, and run all cells to produce a downloadable artifact containing the checkpoint, quality metrics, TTD, throughput, and hardware metadata. T4/CUDA measurement and replay over an actual Ghost/QAC export still require those environments and data. Synthetic results alone are not evidence of production suitability.

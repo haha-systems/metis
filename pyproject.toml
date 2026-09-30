@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metis-decision-model"
+version = "0.1.0"
+description = "A small learned model for bounded structured decisions"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["torch>=2.1"]
+
+[project.optional-dependencies]
+mlx = ["mlx>=0.15; platform_system == 'Darwin' and platform_machine == 'arm64'"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+metis-train = "training.train:main"
+metis-evaluate = "training.evaluate:main"
+metis-ttd = "benchmarks.ttd:main"
+metis-throughput = "benchmarks.throughput:main"
+metis-mlx-throughput = "benchmarks.mlx_throughput:main"
+metis-mlx-checkpoint = "benchmarks.mlx_checkpoint:main"
+metis-mlx-train = "training.mlx_train:main"
+metis-replay = "metis.replay:main"
+
+[tool.setuptools.packages.find]
+include = ["metis*", "training*", "benchmarks*"]

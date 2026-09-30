@@ -1,0 +1,9 @@
+[console_scripts]
+metis-evaluate = training.evaluate:main
+metis-mlx-checkpoint = benchmarks.mlx_checkpoint:main
+metis-mlx-throughput = benchmarks.mlx_throughput:main
+metis-mlx-train = training.mlx_train:main
+metis-replay = metis.replay:main
+metis-throughput = benchmarks.throughput:main
+metis-train = training.train:main
+metis-ttd = benchmarks.ttd:main

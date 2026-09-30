@@ -1,0 +1,13 @@
+# not needed
+.superpowers/
+docs/superpowers
+bin/
+.claude/
+
+.DS_Store
+.env
+*.pem
+
+.pytest-cache
+.venv
+runs
